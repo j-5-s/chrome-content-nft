@@ -20,7 +20,7 @@ export class ChromeStorageLocal {
     });
   }
 
-  getState() {
+  getState<T>(): Promise<T> {
     return new Promise((resolve) => {
       chrome.storage.local.get([this.key], ({ state }) => {
         resolve(state);
