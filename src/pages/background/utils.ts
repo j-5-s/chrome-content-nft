@@ -60,6 +60,13 @@ const getListener = (format = "jpeg", resolve: Resolver) => {
   return screenshotListener;
 };
 
+export const capturePreview = (format = "jpeg"): Promise<string> =>
+  new Promise((resolve) => {
+    chrome.tabs.captureVisibleTab(null, { format }, (dataUrl) => {
+      resolve(dataUrl);
+    });
+  });
+
 export const captureVisibleTab = (
   tab: chrome.tabs.Tab,
   format = "jpeg"
@@ -76,6 +83,7 @@ export const captureVisibleTab = (
 type HTMLData = {
   wallets: { name: string; content: string }[];
   html: string;
+  text: string;
   contractAddress?: string;
 };
 export const getTabHTML = async (tab: chrome.tabs.Tab): Promise<HTMLData> => {
@@ -103,6 +111,7 @@ export const getTabHTML = async (tab: chrome.tabs.Tab): Promise<HTMLData> => {
         wallets,
         contractAddress,
         html: document.documentElement.outerHTML,
+        text: document.documentElement.outerText,
       };
     },
   });

@@ -4,7 +4,10 @@ import { usePersistedState } from "../../common/msg/usePersistedState";
 import type { Settings } from "@src/types";
 
 const Options: React.FC = () => {
-  const { value, actions } = usePersistedState<Settings>("settings", {});
+  const { value, actions } = usePersistedState<Settings>("settings", {
+    pinataApiKey: "",
+    pinataApiSecret: "",
+  });
 
   const handleChange = (key: string) => {
     return (evt: ChangeEvent<HTMLInputElement>) => {
@@ -60,9 +63,9 @@ const Options: React.FC = () => {
               />
             </div>
             <p className="mb-8 leading-relaxed">
-              The API Key and secret are not shared and store in the the
+              The API Key and secret are not shared and stored in the the
               browsers localStorage. They are used to upload NFT metadata to
-              Pinata.
+              IPFS through the pinata pinning service.
             </p>
           </div>
         </div>

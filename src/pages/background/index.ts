@@ -1,8 +1,13 @@
 import reloadOnUpdate from "virtual:reload-on-update-in-background-script";
 import { Logger } from "@src/common/logger/logger";
 import { ChromeStorageLocal } from "./store";
-import { calculateSHA256 } from "../../common/crypto/calculateSha";
-import { getActiveTab, captureVisibleTab, getTabHTML } from "./utils";
+
+import {
+  getActiveTab,
+  captureVisibleTab,
+  getTabHTML,
+  capturePreview,
+} from "./utils";
 import { uploadToPinata } from "../../common/crypto/pinata/pinata";
 import { Settings } from "@src/types";
 
@@ -48,25 +53,52 @@ chrome.runtime.onConnect.addListener(function (port) {
   port.onMessage.addListener(function (msg) {
     konsole.log("onMessage", msg);
     if (msg.type === "initialState") {
-      store.getState().then((state) => {
-        konsole.log("initialState", msg.initialValue, state);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      store.getState().then((state: any) => {
+        konsole.log("initialState", msg.initialState, state);
         publish({
           type: msg.type,
-          value: state?.[msg.key] || msg.initialValue,
+          value: {
+            [msg.key]:
+              typeof msg.initialState === "object"
+                ? { ...msg.initialState }
+                : msg.initialState,
+            ...state,
+          },
           key: msg.key,
           ack: true,
         });
       });
     }
-    if (msg.type === "setState") {
-      store.updateState(msg.key, msg.value).then(() => {
-        publish({
-          type: msg.type,
-          value: msg.value,
-          key: msg.key,
-          ack: true,
+    if (msg.type === "updateState") {
+      store
+        .updateState(msg.key, msg.value[msg.key])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .then(({ state }: { state: any }) => {
+          publish({
+            type: msg.type,
+            value: {
+              ...state,
+            },
+            key: msg.key,
+            ack: true,
+          });
         });
-      });
+    }
+    if (msg.type === "setState") {
+      store
+        .updateState(msg.key, msg.value)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .then(({ state }: { state: any }) => {
+          publish({
+            type: msg.type,
+            value: {
+              ...state,
+            },
+            key: msg.key,
+            ack: true,
+          });
+        });
     }
 
     if (msg.type === "createNFT") {
@@ -74,9 +106,7 @@ chrome.runtime.onConnect.addListener(function (port) {
         try {
           const tab = await getActiveTab();
           const image = await captureVisibleTab(tab);
-          const { html, wallets, contractAddress } = await getTabHTML(tab);
-          const textSHA256 = await calculateSHA256(html);
-          const imageSHA256 = await calculateSHA256(image);
+          const { wallets, contractAddress, text } = await getTabHTML(tab);
           const ts = new Date().getTime();
           const { settings } = await store.getState<SettingsSlice>();
 
@@ -95,17 +125,13 @@ chrome.runtime.onConnect.addListener(function (port) {
                 value: ts,
               },
               {
-                trait_type: "Text SHA 256",
-                value: textSHA256,
-              },
-              {
-                trait_type: "Image SHA 256",
-                value: imageSHA256,
+                trait_type: "Text",
+                value: text,
               },
             ],
             description: `The copyright verification for ${tab.url}`,
             image: "",
-            name: `${tab.title} - ${tab.url} - ${ts}`,
+            name: `${tab.title}`,
           };
 
           try {
@@ -150,12 +176,20 @@ chrome.runtime.onConnect.addListener(function (port) {
       (async () => {
         const tab = await getActiveTab();
         const { contractAddress } = await getTabHTML(tab);
+        const imagePreview = await capturePreview();
         const key = "page";
-        const value = { contractAddress };
-        await store.updateState(key, value);
+        const value = {
+          contractAddress,
+          title: tab.title,
+          url: tab.url,
+          preview: imagePreview,
+        };
+        const { state } = await store.updateState(key, value);
         publish({
           type: "setState",
-          value,
+          value: {
+            ...state,
+          },
           key,
           ack: true,
         });
