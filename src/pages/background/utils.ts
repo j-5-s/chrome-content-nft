@@ -81,40 +81,84 @@ export const captureVisibleTab = (
   });
 
 type HTMLData = {
-  wallets: { name: string; content: string }[];
+  metatags: {
+    [key: string]: string | undefined;
+  };
   html: string;
   text: string;
-  contractAddress?: string;
 };
 export const getTabHTML = async (tab: chrome.tabs.Tab): Promise<HTMLData> => {
   const result = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: () => {
-      const eth = document.documentElement.querySelector(
-        'meta[name="wallet-address:ethereum"]'
-      );
-      const contractMetatag = document.documentElement.querySelector(
-        'meta[name="content-nft-address"]'
-      );
-      const wallets = [];
-      let contractAddress = null;
-      if (eth) {
-        wallets.push({
-          name: eth.getAttribute("name"),
-          content: eth.getAttribute("content"),
-        });
-      }
-      if (contractMetatag) {
-        contractAddress = contractMetatag.getAttribute("content");
-      }
+      /**
+       * If Tag is an array it will return the first matching Tag.
+       * All function / js must be inside the above callback.
+       */
+      type Tag = {
+        name: string;
+        attrName?: string;
+        content: string;
+      };
+      type GetMetaTags = (Tag | Tag[])[];
+      const getMetaTags = (tags: GetMetaTags) => {
+        const ret = tags
+          .map((tag) => {
+            if (!Array.isArray(tag)) {
+              const networkMetatag = document.documentElement.querySelector(
+                `meta[${tag.attrName || "name"}="${tag.content}"]`
+              );
+              const content = networkMetatag?.getAttribute("content");
+              return { content, name: tag.name };
+            } else if (Array.isArray(tag)) {
+              const match = tag.find((_tag) => {
+                const networkMetatag = document.documentElement.querySelector(
+                  `meta[${_tag.attrName || "name"}="${_tag.content}"]`
+                );
+                return !!networkMetatag;
+              });
+              if (match) {
+                const networkMetatag = document.documentElement.querySelector(
+                  `meta[${match.attrName || "name"}="${match.content}"]`
+                );
+
+                const content = networkMetatag?.getAttribute("content");
+                // default the value to always be the first key so its deterministic
+                return { content, name: tag[0].name };
+              }
+            }
+          })
+          .filter((tag) => tag?.content);
+        return ret.reduce((acc, cur) => {
+          return {
+            ...acc,
+            [cur.name as string]: cur.content,
+          };
+        }, {});
+      };
+      const metatags = getMetaTags([
+        { name: "address", content: "content-nft-address" },
+        [
+          { name: "network", content: "nft_contract_network" },
+          { name: "network", content: "nft-contract-network" },
+        ],
+        { name: "keywords", content: "keywords" },
+        [
+          { name: "description", content: "description" },
+          { name: "description", content: "Description" },
+        ],
+        { name: "og:image", attrName: "property", content: "og:image" },
+        { name: "twitter:site", content: "twitter:site" },
+        { name: "author", content: "author" },
+      ]);
+
       return {
-        wallets,
-        contractAddress,
+        metatags,
         html: document.documentElement.outerHTML,
         text: document.documentElement.outerText,
       };
     },
   });
-
+  console.log(result, "asdf");
   return result[0].result as HTMLData;
 };

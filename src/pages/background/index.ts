@@ -106,30 +106,39 @@ chrome.runtime.onConnect.addListener(function (port) {
         try {
           const tab = await getActiveTab();
           const image = await captureVisibleTab(tab);
-          const { wallets, contractAddress, text } = await getTabHTML(tab);
+          const { metatags, text } = await getTabHTML(tab);
           const ts = new Date().getTime();
           const { settings } = await store.getState<SettingsSlice>();
+          const attributes = [
+            {
+              trait_type: "Title",
+              value: tab.title,
+            },
+            {
+              trait_type: "URL",
+              value: tab.url,
+            },
+            {
+              trait_type: "Timestamp",
+              value: ts,
+            },
+            {
+              trait_type: "Text",
+              value: text,
+            },
+          ];
+          Object.keys(metatags).forEach((key) => {
+            attributes.push({
+              trait_type: key,
+              value: metatags[key],
+            });
+          });
 
           const metadata = {
-            attributes: [
-              {
-                trait_type: "Title",
-                value: tab.title,
-              },
-              {
-                trait_type: "URL",
-                value: tab.url,
-              },
-              {
-                trait_type: "Timestamp",
-                value: ts,
-              },
-              {
-                trait_type: "Text",
-                value: text,
-              },
-            ],
-            description: `The copyright verification for ${tab.url}`,
+            attributes,
+            description:
+              metatags.description ||
+              `The copyright verification for ${tab.url}`,
             image: "",
             name: `${tab.title}`,
           };
@@ -151,10 +160,8 @@ chrome.runtime.onConnect.addListener(function (port) {
             // https://nft.j5s.dev/mint?ipfsHash=Qmc2fCaDqSBr1jXzDgTZYHQt1VwKh1DrxTgk1W8U1xPodo&contractAddress=0x19d8ed9987102e2fbfe8e0710e1c38a0ed202f64&wallet=wallet-address:ethereum::0x66c2801e144A0BA4d7F6aFF62f535F312aaF609a
             const params = [];
             params.push(`ipfsHash=${response.IpfsHash}`);
-            params.push(`contractAddress=${contractAddress}`);
-            wallets.forEach((wallet) => {
-              params.push(`wallet=${wallet.name}::${wallet.content}`);
-            });
+            params.push(`contractAddress=${metatags.address || ""}`);
+            params.push(`network=${metatags.network || ""}`);
             const queryString = params.join("&");
             const url = `https://nft.j5s.dev/mint?${queryString}`;
             konsole.log(url);
@@ -172,16 +179,25 @@ chrome.runtime.onConnect.addListener(function (port) {
       })();
     }
 
+    if (msg.type === "navigate") {
+      chrome.tabs.create({
+        url: msg.url,
+      });
+    }
+
     if (msg.type === "popupInit") {
       (async () => {
         const tab = await getActiveTab();
-        const { contractAddress } = await getTabHTML(tab);
+        const { metatags } = await getTabHTML(tab);
         const imagePreview = await capturePreview();
+
         const key = "page";
         const value = {
-          contractAddress,
+          contractAddress: metatags["address"],
           title: tab.title,
           url: tab.url,
+          network: metatags["network"],
+          metatags,
           preview: imagePreview,
         };
         const { state } = await store.updateState(key, value);

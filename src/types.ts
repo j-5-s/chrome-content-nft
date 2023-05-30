@@ -8,4 +8,5 @@ export interface PageAttributes {
   url: string;
   preview: string;
   contractAddress?: string;
+  network?: string;
 }
